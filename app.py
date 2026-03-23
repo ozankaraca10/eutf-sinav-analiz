@@ -785,7 +785,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
         doc.add_paragraph("")
     for text, size in [
         ("EGE ÜNİVERSİTESİ TIP FAKÜLTESİ", 18),
-        ("ÖLÇME VE DEĞERLENDİRME KOMİSYONU", 14),
+        ("TIP EĞİTİMİ ANABİLİM DALI", 14),
     ]:
         t = doc.add_paragraph()
         t.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -796,7 +796,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     doc.add_paragraph("")
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = t.add_run("SINAV ANALİZ RAPORU")
+    r = t.add_run("SINAV ADI SINAVI ANALİZ RAPORU")
     r.bold = True
     r.font.size = Pt(22)
     r.font.color.rgb = RGBColor.from_string("1F4E79")
@@ -972,7 +972,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     doc.add_page_break()
     for _ in range(8):
         doc.add_paragraph("")
-    for text in ["Tıp Eğitimi Anabilim Dalı", "Ölçme ve Değerlendirme Komisyonu"]:
+    for text in ["Ege Üniversitesi Tıp Fakültesi", "Tıp Eğitimi Anabilim Dalı"]:
         t = doc.add_paragraph()
         t.alignment = WD_ALIGN_PARAGRAPH.CENTER
         t.add_run(text).bold = True
