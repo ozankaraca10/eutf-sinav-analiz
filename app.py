@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-st.title("🏥 Ege Üniversitesi Tıp Fakültesi TEAD Sınav Analiz Raporu Yazılımı")
+st.title("🏥 EÜTF TEAD Sınav Analiz Raporu Yazılımı™")
 st.caption("BYS / SBYS uyumlu · Gelişmiş psikometri · Karar destek matrisi · AI Destekli Değerlendirme")
 
 
