@@ -573,7 +573,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
         return f"background-color: {m[v]}" if v in m else ""
 
     st.dataframe(
-        display_df.style.applymap(clr, subset=["Kategori"]),
+       display_df.style.map(clr, subset=["Kategori"]),
         use_container_width=True,
         height=500,
     )
