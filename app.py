@@ -503,6 +503,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
             f"Önerilen/Kabul Edilebilir güçlük ∩ İyi/Mükemmel ayırt edicilik: "
             f"{', '.join(qi)}"
         )
+        
 
     r3 = st.columns(4)
     p60 = (scores >= 60).sum()
@@ -537,7 +538,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
         color="#C0392B",
         linewidth=2,
         ls="--",
-        label=f"Normal eğri (μ={mn:.1f}, σ={sd:.1f})",
+        label=f"Normal dağılım eğrisi (μ={mn:.1f}, σ={sd:.1f})",
     )
     for cv, pv in zip(cnts, patches):
         if cv > 0:
