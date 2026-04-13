@@ -463,7 +463,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     st.caption(f"Not: Puanlar {K} madde üzerinden 100'e normalize edilmiştir.")
 
     # ---- Histogram + Normal Eğri ----
-    st.header("📈 Puan Dağılımı")
+    st.header("📈 Öğrencilerin Puan Dağılımı")
     fig1, ax1 = plt.subplots(figsize=(10, 4.5))
     bins = np.arange(
         int(scores.min() // 10 * 10), int(scores.max() // 10 * 10) + 20, 10
@@ -507,7 +507,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     st.pyplot(fig1)
 
     # ---- Violin Plot ----
-    st.header("🎻 Puan Dağılımı — Violin Plot")
+    st.header("🎻 Öğrencilerin Puan Dağılımı — Violin Plot")
     fig_v, ax_v = plt.subplots(figsize=(10, 3.5))
     vp = ax_v.violinplot(
         [scores],
@@ -581,7 +581,10 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     # ---- Karar Destek Matrisi ----
     st.header("🧭 Karar Destek Matrisi")
     st.caption(
-        "Her hücre, o güçlük–ayırt edicilik kesişimindeki madde sayısını gösterir."
+        "Aşağıdaki tabloda sınav setine ilişkin karar destek matrisi sunulmaktadır. "
+        "Tablodaki renkler maddelerin ayırt edicilik ve zorluk indeksine göre dağılımını "
+        "ifade etmektedir. Buna göre yeşil = sakla, sarı = gözden geçir, turuncu = revize et "
+        "ve kırmızı = sınav setinden çıkar anlamına gelmektedir."
     )
     p_labs = [
         "Çok Zor\n(p<0.30)",
@@ -627,7 +630,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     ax_m.set_xticklabels(p_labs, fontsize=8)
     ax_m.set_yticks([0.5, 1.5, 2.5, 3.5])
     ax_m.set_yticklabels(d_labs, fontsize=8)
-    ax_m.set_xlabel("Güçlük (p)", fontsize=10)
+    ax_m.set_xlabel("Zorluk (p)", fontsize=10)
     ax_m.set_ylabel("Ayırt Edicilik (D)", fontsize=10)
     ax_m.set_title("Karar Destek Matrisi", fontsize=12, fontweight="bold")
     ax_m.invert_yaxis()
@@ -638,7 +641,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     )
 
     # ---- Scatter ----
-    st.header("📉 Güçlük × Ayırt Edicilik")
+    st.header("📉 Zorluk ve Ayırt Edicilik İndekslerinin Birlikteliği")
     fig2, ax2 = plt.subplots(figsize=(10, 6))
     cm2 = {
         "Mükemmel": "#2E7D32",
@@ -655,7 +658,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     ax2.axvline(x=0.30, color="blue", ls="--", alpha=0.3)
     ax2.axvline(x=0.80, color="blue", ls="--", alpha=0.3)
     ax2.fill_betweenx([0.20, 0.70], 0.30, 0.80, alpha=0.06, color="green")
-    ax2.set_xlabel("Güçlük İndeksi (p)")
+    ax2.set_xlabel("Zorluk İndeksi (p)")
     ax2.set_ylabel("Ayırt Edicilik İndeksi (D)")
     ax2.grid(alpha=0.2)
     plt.tight_layout()
@@ -664,7 +667,8 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     # ---- Kesme Puanı Simülasyonu ----
     st.header("🔮 Kesme Puanı Simülasyonu")
     st.caption(
-        "'Kullanılmamalı' maddeler çıkarılsaydı 100 üzerinden puanlar nasıl değişirdi?"
+        "Kesme puanı simülasyonu; sınav analizleri sonrasında sınav setindeki kullanılmamalı "
+        "kategorisindeki sorular dikkate alınmadan analizler yeniden yapıldığında ortaya çıkan puan tablosudur."
     )
     bad = item_df[item_df["Kategori"] == "Kullanılmamalı"]["Madde"].tolist()
     good = [c for c in q_cols if c not in bad]
@@ -679,8 +683,8 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
         sim.append(
             {
                 "Eşik (%)": th,
-                f"Mevcut ({K} madde)": f"{op} (%{op / N * 100:.1f})",
-                f"Yeni ({len(good)} madde)": f"{np_} (%{np_ / N * 100:.1f})",
+                f"İlk analiz ({K} madde)": f"{op} (%{op / N * 100:.1f})",
+                f"Kesme simülasyonu ({len(good)} madde)": f"{np_} (%{np_ / N * 100:.1f})",
                 "Fark": np_ - op,
             }
         )
@@ -700,7 +704,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     if not neg.empty:
         st.error(
             f"**Negatif ayırt ediciliğe sahip {len(neg)} madde** — "
-            f"cevap anahtarı kontrol edin!"
+            f"yazan öğretim üyesi tarafından acil olarak incelenmelidir!"
         )
         st.dataframe(neg, use_container_width=True)
 
@@ -725,17 +729,27 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-3-flash-preview")
-        st.header("🤖 AI Değerlendirme")
+        st.header("🤖 Genel Değerlendirme")
         with st.spinner("Gemini analiz üretiyor..."):
             try:
-                prompt = f"""Sen tıp eğitimi ölçme-değerlendirme uzmanısın. Aşağıdaki sınav verilerini analiz et.
+                prompt = f"""Sen ölçme-değerlendirme uzmanısın. Aşağıdaki sınav verilerini analiz et.
 
 KURALLAR:
 - Türkçe akademik dilde yaz.
-- Güzelleme yapma. Güçlü yön ancak gerçekten dikkat çekici ve ortalamanın üstünde bir gösterge varsa belirt. Standart düzeyde olan şeyleri güçlü yön olarak sunma. Güçlü yön yoksa bu başlığı hiç açma.
-- Psikometrik açıdan sorunlu alanları ve eksiklikleri net ve somut ifade et.
+- İngilizce terimleri parantez içinde verme (skewness, kurtosis, ceiling effect gibi). Türkçe karşılıklarını kullan.
+- "Tıp eğitimi standartları" yerine "ölçme değerlendirme ilkeleri" ifadesini kullan.
+- "kanıtlamaktadır" yerine "göstermektedir" ifadesini tercih et.
+- "vasfa sahip" yerine "özelliğe sahip" ifadesini kullan.
+- "Güçlü yön" yerine "Dikkat Çekici Göstergeler" başlığı altında gerçekten dikkat çekici parametreleri belirt. Standart düzeyde olan şeyleri dikkat çekici olarak sunma. Dikkat çekici gösterge yoksa bu başlığı hiç açma.
+- "Sorunlu Alanlar" yerine "Gelişime Açık Alanlar" başlığını kullan.
+- Psikometrik açıdan gelişime açık alanları ve eksiklikleri net ve somut ifade et.
 - Önerileri uygulanabilir ve spesifik yaz.
 - Çeldirici kelimesini kullan (distraktör değil). Negatif ayırt edici ifadesini kullan (negatif D değil).
+- Negatif ayırt edici maddeler için "İçerik uzmanı tarafından acil inceleme önerilir" yerine "soruyu yazan öğretim üyesi tarafından incelenmeli; soruda bilimsel bir hata veya anahtar hatası varsa iptal edilmeli, soru bankasında pasife alınmalı ya da düzeltilmelidir" ifadesini kullan.
+- "Kullanılmamalı" maddelerin "ölçme hassasiyetine neredeyse hiçbir anlamlı katkı sağlamadığını" belirt (sadece sınavın verimliliğini düşürdüğünü değil).
+- Çeldirici analizinde "çeldirici analizleri yapılmalı" yerine "çeldiricileri gözden geçirilmeli, hiçbir öğrencinin işaretlemediği işlemeyen çeldiriciler değiştirilerek maddenin ayırt ediciliği artırılmalıdır" ifadesini kullan.
+- Madde havuzu revizyonunda "Kullanılmamalı" ve "Düzeltilmeli" kategorisindeki toplam madde sayısını ve yüzdesini belirt.
+- Sınav boyutu optimizasyonunda "madde sayısı azaltılarak madde başına düşen süre artırılabilir" yerine "sınav setinde yer alacak soruların dikkatle hazırlanması gerektiği açıktır" ifadesini kullan.
 
 VERİLER:
 N={N}, K={K}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
@@ -749,7 +763,7 @@ p≥0.95: {len(ceil_)}, p≤0.20: {len(flr_)}
 Kaliteli alt küme ({len(qi)} madde) KR-20: {kr20_q if kr20_q else 'N/A'}
 Kesme puanı sim: {len(bad)} madde çıkarılsa KR-20={kr20_new:.3f}
 
-Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekten varsa)  3. Öneriler"""
+Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekten varsa)  3. Öneriler"""
                 resp = model.generate_content(prompt)
                 ai_general = resp.text
                 st.markdown(ai_general)
@@ -805,6 +819,12 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     t.add_run(f"Rapor Tarihi: {datetime.date.today().strftime('%d.%m.%Y')}").font.size = Pt(11)
+    doc.add_paragraph("")
+    t = doc.add_paragraph()
+    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = t.add_run("RAPORU HAZIRLAYAN")
+    r.bold = True
+    r.font.size = Pt(12)
     doc.add_page_break()
 
     # ---- Kısaltmalar ----
@@ -822,7 +842,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     ]
     at = doc.add_table(rows=len(abbr) + 1, cols=2)
     at.style = "Light Grid Accent 1"
-    at.rows[0].cells[0].text = "Terim"
+    at.rows[0].cells[0].text = "kısaltma ve kavram"
     at.rows[0].cells[1].text = "Açıklama"
     for cell in at.rows[0].cells:
         for run in cell.paragraphs[0].runs:
@@ -831,7 +851,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
         at.rows[i + 1].cells[0].text = k
         at.rows[i + 1].cells[1].text = v
 
-    doc.add_heading("Yöntemsel Not", 2)
+    doc.add_heading("Not", 2)
     doc.add_paragraph(
         "Bu rapordaki madde analizleri Klasik Test Teorisi (KTT) çerçevesinde, "
         "üst-alt %27 grup yöntemiyle yapılmıştır. Kelley (1939) ve Ebel (1965) "
@@ -846,14 +866,14 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     sd_ = [
         ("Gösterge", "Değer", "Yorum"),
         ("Öğrenci Sayısı (N)", str(N), ""),
-        ("Madde Sayısı (K)", str(K), ""),
+        ("Madde Sayısı (sınav setindeki soru sayısı)", str(K), ""),
         ("Ortalama ± SD", f"{mn:.2f} ± {sd:.2f}", "100 üzerinden"),
         ("Medyan", f"{med:.1f}", ""),
         ("Q1 – Q3", f"{q1v:.1f} – {q3v:.1f}", f"IQR = {q3v - q1v:.1f}"),
         ("Min – Max", f"{scores.min():.0f} – {scores.max():.0f}", ""),
         ("Çarpıklık / Basıklık", f"{skew:.3f} / {kurt:.3f}", "Sola çarpık" if skew < -0.5 else "Normal"),
-        ("≥60 puan", f"{p60} (%{p60 / N * 100:.1f})", ""),
-        ("<40 puan", f"{f40} (%{f40 / N * 100:.1f})", ""),
+        ("≥60 puan (Başarılı öğrenci oranı)", f"{p60} (%{p60 / N * 100:.1f})", ""),
+        ("<40 puan (Başarısız öğrenci oranı)", f"{f40} (%{f40 / N * 100:.1f})", ""),
         ("KR-20 (tüm maddeler)", f"{alpha:.3f}", "Yüksek" if alpha >= 0.80 else "Kabul edilebilir"),
         (f"KR-20 (kaliteli {len(qi)} madde)", f"{kr20_q:.3f}" if kr20_q else "—", "Önerilen/KE ∩ Mükemmel/İyi"),
         ("Ferguson's δ", f"{fdelta:.3f}", "İyi" if fdelta >= 0.90 else "Düşük"),
@@ -874,7 +894,7 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
                     run.bold = True
 
     # ---- Bölüm 2: Puan Dağılımı ----
-    doc.add_heading("2. Puan Dağılımı", 1)
+    doc.add_heading("2. Öğrencilerin Puan Dağılımı", 1)
     doc.add_picture(bufs["hist"], width=Inches(5.8))
     doc.add_paragraph("")
     doc.add_picture(bufs["violin"], width=Inches(5.8))
@@ -903,55 +923,65 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
     # ---- Bölüm 4: Karar Destek Matrisi ----
     doc.add_heading("4. Karar Destek Matrisi", 1)
     doc.add_paragraph(
-        "Yeşil = Sakla  |  Sarı = Gözden geçir  |  Turuncu = Revize  |  Kırmızı = Çıkar"
+        "Aşağıdaki tabloda sınav setine ilişkin karar destek matrisi sunulmaktadır. "
+        "Tablodaki renkler maddelerin ayırt edicilik ve zorluk indeksine göre dağılımını "
+        "ifade etmektedir. Buna göre yeşil = sakla, sarı = gözden geçir, turuncu = revize et "
+        "ve kırmızı = sınav setinden çıkar anlamına gelmektedir."
     )
     doc.add_picture(bufs["matrix"], width=Inches(5.5))
 
     # ---- Bölüm 5: Scatter ----
-    doc.add_heading("5. Güçlük × Ayırt Edicilik Grafiği", 1)
+    doc.add_heading("5. Zorluk ve Ayırt Edicilik İndekslerinin Birlikteliği", 1)
     doc.add_picture(bufs["scatter"], width=Inches(5.5))
 
     # ---- Bölüm 6: Kesme Puanı ----
     doc.add_page_break()
     doc.add_heading("6. Kesme Puanı Simülasyonu", 1)
     doc.add_paragraph(
-        f"{len(bad)} 'Kullanılmamalı' kategorisindeki madde çıkarıldığında "
-        f"(puanlar 100 üzerinden yeniden hesaplanarak):"
+        "Kesme puanı simülasyonu; sınav analizleri sonrasında sınav setindeki kullanılmamalı "
+        "kategorisindeki sorular dikkate alınmadan analizler yeniden yapıldığında ortaya çıkan "
+        f"puan tablosudur. Buna göre bu sınavda {len(bad)} adet 'Kullanılmamalı' kategorisindeki "
+        "madde çıkarıldığında puanlar 100 üzerinden yeniden hesaplandığında aşağıdaki tablo "
+        "ortaya çıkmıştır."
     )
     doc.add_paragraph(f"KR-20: {alpha:.3f} → {kr20_new:.3f} ({kr20_new - alpha:+.3f})")
     st_ = doc.add_table(rows=len(sim) + 1, cols=4)
     st_.style = "Light Grid Accent 1"
-    sim_hdrs = ["Eşik (%)", f"Mevcut ({K} madde)", f"Yeni ({len(good)} madde)", "Fark"]
+    sim_hdrs = ["Eşik (%)", f"İlk analiz ({K} madde)", f"Kesme simülasyonu ({len(good)} madde)", "Fark"]
     for j, h in enumerate(sim_hdrs):
         st_.rows[0].cells[j].text = h
         for run in st_.rows[0].cells[j].paragraphs[0].runs:
             run.bold = True
     for i, s in enumerate(sim):
         st_.rows[i + 1].cells[0].text = str(s["Eşik (%)"])
-        st_.rows[i + 1].cells[1].text = str(s[f"Mevcut ({K} madde)"])
-        st_.rows[i + 1].cells[2].text = str(s[f"Yeni ({len(good)} madde)"])
+        st_.rows[i + 1].cells[1].text = str(s[f"İlk analiz ({K} madde)"])
+        st_.rows[i + 1].cells[2].text = str(s[f"Kesme simülasyonu ({len(good)} madde)"])
         st_.rows[i + 1].cells[3].text = str(s["Fark"])
 
     # ---- Bölüm 7: Kritik Maddeler ----
     if not neg.empty:
         doc.add_heading("7. Kritik Maddeler — Negatif Ayırt Edici", 1)
-        doc.add_paragraph(f"Maddeler: {', '.join(neg['Madde'].tolist())}")
         doc.add_paragraph(
-            "Bu maddelerde alt gruptaki öğrenciler üst gruptan daha yüksek doğru yanıt oranına "
-            "sahiptir. Bu durum hatalı cevap anahtarı, soru kökünde belirsizlik veya çoklu doğru "
-            "yanıt ihtimaline işaret eder. İçerik uzmanı tarafından acil inceleme önerilir."
+            "Sınav analizi sonucunda maddelerde alt gruptaki öğrenciler üst gruptan daha yüksek "
+            "doğru yanıt oranına sahip olması Negatif Ayırt edicilik olarak tanımlanmaktadır. "
+            "Bu durumun saptandığı sorularda hatalı cevap anahtarı, soru kökünde belirsizlik "
+            "veya çoklu doğru yanıt ihtimali dikkate alınmalıdır. Negatif Ayırt edicilik "
+            "belirlenen soru; yazan öğretim üyesi tarafından acil olarak incelemelidir."
         )
+        doc.add_paragraph(
+            f"Bu sınavda Negatif Ayırt edicilik saptanan sorular;"
+        )
+        doc.add_paragraph(f"Maddeler: {', '.join(neg['Madde'].tolist())}")
 
     # ---- Bölüm 8: AI ----
     if ai_general:
         doc.add_page_break()
         next_section = 8 if not neg.empty else 7
-        doc.add_heading(f"{next_section}. AI Destekli Değerlendirme", 1)
+        doc.add_heading(f"{next_section}. Genel Değerlendirme", 1)
         p = doc.add_paragraph(
-            "Bu değerlendirme yapay zeka (Gemini) tarafından üretilmiştir. "
-            "Nihai akademik değerlendirme sorumluluğu ilgili öğretim üyelerine aittir."
+            "Ölçme-değerlendirme ilkeleri doğrultusunda, paylaşılan sınav verilerinin "
+            "psikometrik analizine ilişkin değerlendirmeler aşağıda sunulmuştur."
         )
-        p.runs[0].italic = True
         for line in ai_general.split("\n"):
             line = line.strip()
             if not line:
@@ -967,6 +997,18 @@ Başlıklar: 1. Sorunlu Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekt
                 )
             else:
                 doc.add_paragraph(re.sub(r"\*\*(.+?)\*\*", r"\1", line))
+
+    # ---- AI Footnote ----
+    if ai_general:
+        doc.add_paragraph("")
+        fn = doc.add_paragraph()
+        r = fn.add_run(
+            '*Bu raporun oluşturulmasında yapay zekadan destek alınmış olup '
+            'genel değerlendirme ifadeleri Tıp Eğitimi Danışman Öğretim Üyesi '
+            'tarafından hazırlanmıştır.'
+        )
+        r.italic = True
+        r.font.size = Pt(9)
 
     # ---- Son Sayfa: İmza ----
     doc.add_page_break()
