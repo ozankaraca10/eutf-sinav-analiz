@@ -15,6 +15,8 @@ from scipy import stats as sp_stats
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 from io import BytesIO
 import re, warnings, datetime
 
@@ -246,6 +248,20 @@ def ferguson_delta(scores, k):
     return (n**2 - ((freq**2).sum())) / (n**2 - n**2 / (k + 1))
 
 
+def extract_exam_name(filename):
+    """Excel dosya adından sınav adını çıkar.
+    Örn: 'ÇOCUK SAĞLIĞI ... SINAVI (SBYS) - Tarih_ ...' → 'ÇOCUK SAĞLIĞI ... SINAVI (SBYS)'
+    """
+    name = filename
+    # Uzantıyı kaldır
+    name = re.sub(r'\.(xlsx?|csv)$', '', name, flags=re.IGNORECASE)
+    # ' - Tarih_' veya ' - Tarih:' sonrasını kaldır
+    name = re.split(r'\s*-\s*Tarih[_:]', name, flags=re.IGNORECASE)[0]
+    # 'Öğrenci Soru Analizi' / 'Frekans Analizi' sonrasını kaldır
+    name = re.split(r'\s*(Öğrenci Soru Analizi|Frekans Analizi)', name, flags=re.IGNORECASE)[0]
+    return name.strip()
+
+
 # ============================================================
 # UI — INPUT
 # ============================================================
@@ -291,6 +307,9 @@ if run_btn and student_file and freq_file:
     with st.spinner("Veriler okunuyor..."):
         df, q_cols = parse_student(student_file)
         freq = parse_freq(freq_file)
+
+    # Sınav adını dosya adından çıkar
+    exam_name = extract_exam_name(student_file.name)
 
     N = len(df)
     K = len(q_cols)
@@ -810,7 +829,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     doc.add_paragraph("")
     t = doc.add_paragraph()
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = t.add_run("SINAV ADI SINAVI ANALİZ RAPORU")
+    r = t.add_run(f"{exam_name} ANALİZ RAPORU")
     r.bold = True
     r.font.size = Pt(22)
     r.font.color.rgb = RGBColor.from_string("1F4E79")
@@ -825,6 +844,12 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     r = t.add_run("RAPORU HAZIRLAYAN")
     r.bold = True
     r.font.size = Pt(12)
+    if analyst_name:
+        t = doc.add_paragraph()
+        t.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = t.add_run(analyst_name)
+        r.bold = True
+        r.font.size = Pt(12)
     doc.add_page_break()
 
     # ---- Kısaltmalar ----
@@ -902,12 +927,27 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     # ---- Bölüm 3: Madde Analizi ----
     doc.add_page_break()
     doc.add_heading("3. Madde Analizi Detay Tablosu", 1)
-    doc.add_paragraph(
+
+    # Özet satırı — bold ve kırmızı
+    summary_para = doc.add_paragraph()
+    summary_text = (
         f"Mükemmel: {cc.get('Mükemmel', 0)}  ·  İyi: {cc.get('İyi', 0)}  ·  "
         f"Düzeltilmeli: {cc.get('Düzeltilmeli', 0)}  ·  "
         f"Kullanılmamalı: {cc.get('Kullanılmamalı', 0)}  ·  "
         f"Negatif Ayırt Edici: {(item_df['D'] < 0).sum()}"
     )
+    r = summary_para.add_run(summary_text)
+    r.bold = True
+    r.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+
+    # Renk açıklaması (Bölüm 4 ile tutarlı)
+    doc.add_paragraph(
+        "Tablodaki satır renkleri maddelerin ayırt edicilik kategorisine göre belirlenmiştir. "
+        "Buna göre yeşil = mükemmel/iyi (sakla), sarı = düzeltilmeli (gözden geçir), "
+        "turuncu = kullanılmamalı (revize et) ve kırmızı = negatif ayırt edici (sınav setinden çıkar) "
+        "anlamına gelmektedir."
+    )
+
     hdrs = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Karar"]
     mt = doc.add_table(rows=len(item_df) + 1, cols=len(hdrs))
     mt.style = "Light Grid Accent 1"
@@ -915,10 +955,37 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         mt.rows[0].cells[j].text = h
         for run in mt.rows[0].cells[j].paragraphs[0].runs:
             run.bold = True
-    for i, row in item_df.iterrows():
+
+    # Kategori → arka plan renk eşleştirmesi (Karar Destek Matrisi ile tutarlı)
+    cat_colors = {
+        "Mükemmel": "C8E6C9",    # yeşil
+        "İyi": "C8E6C9",         # yeşil
+        "Düzeltilmeli": "FFF9C4", # sarı
+        "Kullanılmamalı": "FFE0B2", # turuncu
+    }
+
+    for i, (_, row) in enumerate(item_df.iterrows()):
         cols = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Karar"]
+        kategori = row["Kategori"]
+        d_val = row["D"]
+
+        # Negatif ayırt edici → kırmızı
+        if d_val < 0:
+            bg_color = "FFCDD2"
+        else:
+            bg_color = cat_colors.get(kategori, None)
+
         for j, col in enumerate(cols):
-            mt.rows[i + 1].cells[j].text = str(row[col])
+            cell = mt.rows[i + 1].cells[j]
+            cell.text = str(row[col])
+            # Arka plan rengi uygula
+            if bg_color:
+                shading = OxmlElement("w:shd")
+                shading.set(qn("w:fill"), bg_color)
+                shading.set(qn("w:val"), "clear")
+                cell.paragraphs[0].paragraph_format.element.get_or_add_pPr()
+                tc_pr = cell._tc.get_or_add_tcPr()
+                tc_pr.append(shading)
 
     # ---- Bölüm 4: Karar Destek Matrisi ----
     doc.add_heading("4. Karar Destek Matrisi", 1)
@@ -977,26 +1044,46 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     if ai_general:
         doc.add_page_break()
         next_section = 8 if not neg.empty else 7
-        doc.add_heading(f"{next_section}. Genel Değerlendirme", 1)
-        p = doc.add_paragraph(
+        doc.add_heading(f"{next_section}. Genel Değerlendirme*", 1)
+        intro = doc.add_paragraph(
             "Ölçme-değerlendirme ilkeleri doğrultusunda, paylaşılan sınav verilerinin "
             "psikometrik analizine ilişkin değerlendirmeler aşağıda sunulmuştur."
         )
+        intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         for line in ai_general.split("\n"):
             line = line.strip()
             if not line:
                 continue
             if line.startswith("#"):
-                doc.add_heading(
-                    re.sub(r"\*\*(.+?)\*\*", r"\1", line.lstrip("# ")), level=2
-                )
+                # Başlık — heading 2, bold zaten ama ek olarak garantiliyoruz
+                clean_title = re.sub(r"\*\*(.+?)\*\*", r"\1", line.lstrip("# "))
+                h = doc.add_heading(clean_title, level=2)
+                for run in h.runs:
+                    run.bold = True
             elif line.startswith("- ") or line.startswith("* "):
-                doc.add_paragraph(
-                    re.sub(r"\*\*(.+?)\*\*", r"\1", line[2:]),
-                    style="List Bullet",
-                )
+                # Bullet item — bold kalıpları koru, iki yana yasla
+                raw_text = line[2:]
+                bp = doc.add_paragraph(style="List Bullet")
+                bp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                # **bold** kalıplarını parse et
+                parts = re.split(r"(\*\*.+?\*\*)", raw_text)
+                for part in parts:
+                    if part.startswith("**") and part.endswith("**"):
+                        r = bp.add_run(part[2:-2])
+                        r.bold = True
+                    else:
+                        bp.add_run(part)
             else:
-                doc.add_paragraph(re.sub(r"\*\*(.+?)\*\*", r"\1", line))
+                # Normal paragraf — bold kalıpları koru, iki yana yasla
+                pp = doc.add_paragraph()
+                pp.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                parts = re.split(r"(\*\*.+?\*\*)", line)
+                for part in parts:
+                    if part.startswith("**") and part.endswith("**"):
+                        r = pp.add_run(part[2:-2])
+                        r.bold = True
+                    else:
+                        pp.add_run(part)
 
     # ---- AI Footnote ----
     if ai_general:
@@ -1046,7 +1133,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     st.download_button(
         "📥 Tam Rapor İndir (.docx)",
         data=buf,
-        file_name="sinav_analiz_raporu.docx",
+        file_name=f"{exam_name} Analiz Raporu.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         type="primary",
         use_container_width=True,
