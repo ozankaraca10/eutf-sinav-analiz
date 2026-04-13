@@ -15,8 +15,6 @@ from scipy import stats as sp_stats
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
 from io import BytesIO
 import re, warnings, datetime
 
@@ -151,6 +149,14 @@ def parse_freq(f):
         elif "kaynak" in cs:
             cmap[c] = "KAYNAK"
     freq.rename(columns=cmap, inplace=True)
+
+    # Başlıksız sütunları tespit et — daha önce çıktığı sınav bilgisi
+    # Genellikle son 2 sütun: sınav adı + eski zorluk değeri
+    unnamed_cols = [c for c in freq.columns if str(c).startswith("Unnamed")]
+    if len(unnamed_cols) >= 1:
+        freq.rename(columns={unnamed_cols[0]: "ONCEKI_SINAV"}, inplace=True)
+    if len(unnamed_cols) >= 2:
+        freq.rename(columns={unnamed_cols[1]: "ONCEKI_P"}, inplace=True)
 
     if "NO" in freq.columns:
         freq = freq[
@@ -356,24 +362,50 @@ if run_btn and student_file and freq_file:
         # Item analysis
         rows = []
         for q in q_cols:
-            qn = int(re.search(r"\d+", q).group())
+            qn_num = int(re.search(r"\d+", q).group())
             p = df[q].mean()
             d = dv[q]
             r = rpbi[q]
 
             fr = (
-                freq[freq["NO"] == qn]
+                freq[freq["NO"] == qn_num]
                 if "NO" in freq.columns
                 else pd.DataFrame()
             )
             nf = td = 0
-            if not fr.empty and "SEC" in freq.columns:
-                for o in parse_dist(fr.iloc[0]["SEC"], N):
-                    if not o["correct"]:
-                        td += 1
-                        nf += 0 if o["func"] else 1
+            onceki_sinav = ""
+            onceki_p = None
+            if not fr.empty:
+                if "SEC" in freq.columns:
+                    for o in parse_dist(fr.iloc[0]["SEC"], N):
+                        if not o["correct"]:
+                            td += 1
+                            nf += 0 if o["func"] else 1
+                # Daha önce çıktığı sınav bilgisi (Unnamed sütundan)
+                if "ONCEKI_SINAV" in freq.columns:
+                    s_val = fr.iloc[0]["ONCEKI_SINAV"]
+                    if pd.notna(s_val):
+                        s_str = str(s_val).strip()
+                        if s_str and s_str not in ("0", "0.0", "nan"):
+                            onceki_sinav = s_str
+                # Önceki sınavdaki zorluk değeri
+                if "ONCEKI_P" in freq.columns:
+                    p_val = fr.iloc[0]["ONCEKI_P"]
+                    if pd.notna(p_val):
+                        try:
+                            onceki_p = round(float(p_val), 4)
+                        except (ValueError, TypeError):
+                            onceki_p = None
 
             ds = "—" if td == 0 else ("✅" if nf == 0 else f"{nf}/{td}")
+            # Tekrar durumu etiketi
+            if onceki_sinav:
+                tekrar_label = f"Tekrar ({onceki_sinav})"
+                if onceki_p is not None:
+                    tekrar_label += f" [p={onceki_p}]"
+            else:
+                tekrar_label = "Yeni"
+
             rows.append(
                 {
                     "Madde": q,
@@ -383,6 +415,7 @@ if run_btn and student_file and freq_file:
                     "r_pbi": round(r, 2),
                     "Kategori": cat_disc(d),
                     "Çeldirici": ds,
+                    "Önceki Kullanım": tekrar_label,
                     "Karar": karar_fn(p, d, r),
                 }
             )
@@ -571,12 +604,26 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
 
     # ---- Madde Analizi ----
     st.header("🔬 Madde Analizi")
-    mc = st.columns(5)
+
+    # Tekrar eden soru istatistikleri
+    tekrar_df = item_df[item_df["Önceki Kullanım"] != "Yeni"]
+    tekrar_count = len(tekrar_df)
+    yeni_count = len(item_df) - tekrar_count
+
+    mc = st.columns(6)
     mc[0].metric("🟢 Mükemmel", cc.get("Mükemmel", 0))
     mc[1].metric("🟡 İyi", cc.get("İyi", 0))
     mc[2].metric("🟠 Düzeltilmeli", cc.get("Düzeltilmeli", 0))
     mc[3].metric("🔴 Kullanılmamalı", cc.get("Kullanılmamalı", 0))
     mc[4].metric("⛔ Negatif Ayırt Edici", (item_df["D"] < 0).sum())
+    mc[5].metric("🔄 Tekrar Eden Soru", tekrar_count)
+
+    if tekrar_count > 0:
+        tekrar_sinavlar = tekrar_df["Önceki Kullanım"].apply(
+            lambda x: re.search(r"Tekrar \((.+?)\)", x).group(1) if re.search(r"Tekrar \((.+?)\)", x) else ""
+        ).value_counts()
+        sinav_ozet = ", ".join([f"{s}: {c} soru" for s, c in tekrar_sinavlar.items() if s])
+        st.info(f"🔄 **{tekrar_count}/{K} madde daha önce kullanılmış** ({sinav_ozet})")
 
     display_df = item_df.rename(
         columns={"Çeldirici": "Çeldirici\n(işlevsiz/toplam)"}
@@ -781,6 +828,7 @@ Negatif ayırt edici madde: {(item_df['D'] < 0).sum()}
 p≥0.95: {len(ceil_)}, p≤0.20: {len(flr_)}
 Kaliteli alt küme ({len(qi)} madde) KR-20: {kr20_q if kr20_q else 'N/A'}
 Kesme puanı sim: {len(bad)} madde çıkarılsa KR-20={kr20_new:.3f}
+Tekrar eden soru: {tekrar_count}/{K} madde daha önceki sınavlardan tekrar kullanılmış{f" (Yeni: {yeni_count})" if tekrar_count > 0 else ""}
 
 Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekten varsa)  3. Öneriler"""
                 resp = model.generate_content(prompt)
@@ -906,6 +954,8 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         ("Spearman-Brown", f"{sb_corr:.3f}", ""),
         ("SEM", f"{sem:.2f}", ""),
         ("%95 Güven Aralığı", f"±{ci95:.1f} puan", ""),
+        ("Tekrar Eden Soru", f"{tekrar_count}/{K} (%{tekrar_count/K*100:.1f})",
+         f"Yeni: {yeni_count}" if tekrar_count > 0 else "Tüm sorular yeni"),
     ]
     gt = doc.add_table(rows=len(sd_), cols=3)
     gt.style = "Light Grid Accent 1"
@@ -948,7 +998,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "anlamına gelmektedir."
     )
 
-    hdrs = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Karar"]
+    hdrs = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki Kullanım", "Karar"]
     mt = doc.add_table(rows=len(item_df) + 1, cols=len(hdrs))
     mt.style = "Light Grid Accent 1"
     for j, h in enumerate(hdrs):
@@ -965,7 +1015,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     }
 
     for i, (_, row) in enumerate(item_df.iterrows()):
-        cols = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Karar"]
+        cols = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Önceki Kullanım", "Karar"]
         kategori = row["Kategori"]
         d_val = row["D"]
 
@@ -980,12 +1030,12 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
             cell.text = str(row[col])
             # Arka plan rengi uygula
             if bg_color:
-                shading = OxmlElement("w:shd")
-                shading.set(qn("w:fill"), bg_color)
-                shading.set(qn("w:val"), "clear")
-                cell.paragraphs[0].paragraph_format.element.get_or_add_pPr()
-                tc_pr = cell._tc.get_or_add_tcPr()
-                tc_pr.append(shading)
+                from docx.oxml.parser import parse_xml
+                from docx.oxml.ns import nsdecls
+                shading_elm = parse_xml(
+                    f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{bg_color}"/>'
+                )
+                cell._tc.get_or_add_tcPr().append(shading_elm)
 
     # ---- Bölüm 4: Karar Destek Matrisi ----
     doc.add_heading("4. Karar Destek Matrisi", 1)
