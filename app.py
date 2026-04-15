@@ -475,7 +475,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     st.header("📊 Genel Psikometrik Göstergeler")
     r1 = st.columns(4)
     r1[0].metric("Ortalama ± SD", f"{mn:.1f} ± {sd:.1f}")
-    r1[1].metric("Medyan", f"{med:.1f}")
+    r1[1].metric("Ortanca", f"{med:.1f}")
     r1[2].metric(
         "KR-20 (tüm maddeler)",
         f"{alpha:.3f}",
@@ -551,7 +551,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
                 fontweight="bold",
             )
     ax1.axvline(mn, color="#E67E22", ls=":", alpha=0.8, label=f"Ortalama = {mn:.1f}")
-    ax1.axvline(med, color="#27AE60", ls=":", alpha=0.8, label=f"Medyan = {med:.1f}")
+    ax1.axvline(med, color="#27AE60", ls=":", alpha=0.8, label=f"Ortanca = {med:.1f}")
     ax1.set_xlabel("Puan (100 üzerinden)")
     ax1.set_ylabel("Öğrenci Sayısı")
     ax1.legend(fontsize=8, loc="upper left")
@@ -594,7 +594,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     legend_els = [
         Line2D([0], [0], color="#4472C4", lw=8, alpha=0.5, label="Yoğunluk tahmini (kernel density)"),
         Line2D([0], [0], color="#E67E22", lw=2, label=f"Ortalama ({mn:.1f})"),
-        Line2D([0], [0], color="#27AE60", lw=2, label=f"Medyan ({med:.1f})"),
+        Line2D([0], [0], color="#27AE60", lw=2, label=f"Ortanca ({med:.1f})"),
         Line2D([0], [0], color="#555", lw=1, label=f"Min–Max ({scores.min():.0f}–{scores.max():.0f})"),
         Line2D([0], [0], marker="o", color="w", markerfacecolor="#2C3E50", markersize=4, alpha=0.5, label="Bireysel puanlar"),
     ]
@@ -942,7 +942,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         ("Öğrenci Sayısı (N)", str(N), ""),
         ("Madde Sayısı (sınav setindeki soru sayısı)", str(K), ""),
         ("Ortalama ± SD", f"{mn:.2f} ± {sd:.2f}", "100 üzerinden"),
-        ("Medyan", f"{med:.1f}", ""),
+        ("Ortanca", f"{med:.1f}", ""),
         ("Q1 – Q3", f"{q1v:.1f} – {q3v:.1f}", f"IQR = {q3v - q1v:.1f}"),
         ("Min – Max", f"{scores.min():.0f} – {scores.max():.0f}", ""),
         ("Çarpıklık / Basıklık", f"{skew:.3f} / {kurt:.3f}", "Sola çarpık" if skew < -0.5 else "Normal"),
