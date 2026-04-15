@@ -98,7 +98,7 @@ def parse_student(f):
     df = df.dropna(how="all")
 
     qc = sorted(
-        [c for c in df.columns if re.match(r"^[qQ]\d+$", c)],
+        [c for c in df.columns if re.match(r"^[qQsS]\d+$", c)],
         key=lambda x: int(re.search(r"\d+", x).group()),
     )
     if not qc:
@@ -107,6 +107,10 @@ def parse_student(f):
 
     df.rename(columns={c: c.upper() for c in qc}, inplace=True)
     qc = [c.upper() for c in qc]
+    # Q→S dönüşümü (Soru 1, Soru 2... için S1, S2...)
+    s_rename = {c: "S" + c[1:] for c in qc}
+    df.rename(columns=s_rename, inplace=True)
+    qc = [s_rename[c] for c in qc]
     for c in qc:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0).astype(int)
 
@@ -234,18 +238,18 @@ def cat_disc(d):
 
 def karar_fn(p, d, r):
     if d < 0:
-        return "Çıkar (negatif ayırt edici)"
+        return "Soru yazarı tarafından acil incelenmeli; hatalı anahtar veya belirsiz kök olabilir — iptal ya da pasife alınması önerilir"
     if 0.30 <= p <= 0.80 and d >= 0.30:
-        return "Sakla"
+        return "Soru bankasında saklanması uygundur"
     if d < 0.20 and r < 0.15:
-        return "Çıkar"
+        return "Ölçme hassasiyetine katkı sağlamıyor; soru bankasından çıkarılması önerilir"
     if d < 0.20:
-        return "Revize et"
+        return "Soru kökü ve çeldiricilerin gözden geçirilerek yeniden düzenlenmesi önerilir"
     if p >= 0.95:
-        return "Çok kolay — revize"
+        return "Tavan etkisi — zorluk düzeyi artırılarak yeniden düzenlenmesi önerilir"
     if p < 0.15:
-        return "Çok zor — revize"
-    return "Gözden geçir"
+        return "Taban etkisi — soru kökü ve seçeneklerin sadeleştirilerek yeniden düzenlenmesi önerilir"
+    return "Soru kökü ve çeldiricilerin gözden geçirilmesi önerilir"
 
 
 def ferguson_delta(scores, k):
@@ -323,7 +327,7 @@ if run_btn and student_file and freq_file:
     raw_scores = df["TOTAL_RAW"].values.astype(float)
 
     st.success(
-        f"✅ {N} öğrenci × {K} madde yüklendi. "
+        f"✅ {N} öğrenci × {K} soru yüklendi. "
         f"Puanlar 100 üzerinden normalize edildi."
     )
 
@@ -408,7 +412,7 @@ if run_btn and student_file and freq_file:
 
             rows.append(
                 {
-                    "Madde": q,
+                    "Soru": q,
                     "p": round(p, 2),
                     "Zorluk": cat_d(p),
                     "D": round(d, 2),
@@ -426,7 +430,7 @@ if run_btn and student_file and freq_file:
         qm = item_df["Zorluk"].isin(["Önerilen", "Kabul Edilebilir"]) & item_df[
             "Kategori"
         ].isin(["Mükemmel", "İyi"])
-        qi = item_df[qm]["Madde"].tolist()
+        qi = item_df[qm]["Soru"].tolist()
         kr20_q = kr20(df[qi]) if len(qi) > 1 else None
 
     # ============================================================
@@ -439,10 +443,10 @@ if run_btn and student_file and freq_file:
             """
 | Terim | Açıklama |
 |:---|:---|
-| **p (Güçlük İndeksi)** | Maddeyi doğru yanıtlayan öğrenci oranı. 0.30–0.80 ideal. |
+| **p (Güçlük İndeksi)** | Soruyu doğru yanıtlayan öğrenci oranı. 0.30–0.80 ideal. |
 | **D (Ayırt Edicilik İndeksi)** | Üst %27 ve alt %27 gruplarının doğru yanıt farkı. D≥0.30 iyi; D<0.20 zayıf; D<0 sorunlu. |
-| **r_pbi** | Düzeltilmiş nokta çift serili korelasyon (madde–toplam). r_pbi≥0.30 iyi; <0.15 zayıf. |
-| **KR-20** | Kuder-Richardson 20 — dikotom maddeler için iç tutarlılık. ≥0.80 yüksek; 0.70–0.79 kabul edilebilir. |
+| **r_pbi** | Düzeltilmiş nokta çift serili korelasyon (soru–toplam). r_pbi≥0.30 iyi; <0.15 zayıf. |
+| **KR-20** | Kuder-Richardson 20 — dikotom sorular için iç tutarlılık. ≥0.80 yüksek; 0.70–0.79 kabul edilebilir. |
 | **SEM** | Standart Ölçme Hatası = SD × √(1 − KR-20). Gözlenen puandaki belirsizlik bandı. |
 | **%95 Güven Aralığı** | Gerçek puan ±1.96×SEM aralığında olma olasılığı %95. |
 | **Ferguson's δ** | Puanların yayılım genişliği. δ>0.90 iyi ayırt etme kapasitesi. |
@@ -461,7 +465,7 @@ if run_btn and student_file and freq_file:
     ):
         st.markdown(
             f"""
-Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **üst-alt %27 grup yöntemiyle** yapılmıştır.
+Bu rapordaki soru analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **üst-alt %27 grup yöntemiyle** yapılmıştır.
 
 **Neden KTT?** KTT, tıp eğitiminde dünya genelinde en yaygın kullanılan psikometrik yaklaşımdır. NBME, AMEE ve TEPDAD standartları KTT metriklerini referans alır. Hesaplaması şeffaf, yorumlaması kolaydır ve öğretim üyelerine doğrudan geri bildirim verilmesine uygundur.
 
@@ -471,13 +475,21 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
 """
         )
 
+    # ---- KEYPS Bilgi Notu ----
+    st.info(
+        "📌 **Bilgi Notu:** Bu raporda değinilen tüm sorular için tekil incelemeler, "
+        "BYK-SBYK Başkan, Yardımcıları ve üyeleri tarafından "
+        "**KEYPS > Ölçme Araçları > Kuramsal Sınavlar > İlgili Sınavın solundaki İşlemler Menüsü > "
+        "Gelişmiş Raporlar** bölümünden yapılabilir."
+    )
+
     # ---- Genel Göstergeler ----
     st.header("📊 Genel Psikometrik Göstergeler")
     r1 = st.columns(4)
     r1[0].metric("Ortalama ± SD", f"{mn:.1f} ± {sd:.1f}")
     r1[1].metric("Ortanca", f"{med:.1f}")
     r1[2].metric(
-        "KR-20 (tüm maddeler)",
+        "KR-20 (tüm sorular)",
         f"{alpha:.3f}",
         delta=(
             "Yüksek"
@@ -499,7 +511,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
 
     if kr20_q is not None:
         st.info(
-            f"🎯 **KR-20 (kaliteli alt küme — {len(qi)} madde):** {kr20_q:.3f}  \n"
+            f"🎯 **KR-20 (kaliteli alt küme — {len(qi)} soru):** {kr20_q:.3f}  \n"
             f"Önerilen/Kabul Edilebilir güçlük ∩ İyi/Mükemmel ayırt edicilik: "
             f"{', '.join(qi)}"
         )
@@ -513,7 +525,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     r3[1].metric("≥50 puan", f"{p50} (%{p50 / N * 100:.1f})")
     r3[2].metric("<40 puan", f"{f40} (%{f40 / N * 100:.1f})")
     r3[3].metric("Çarpıklık / Basıklık", f"{skew:.2f} / {kurt:.2f}")
-    st.caption(f"Not: Puanlar {K} madde üzerinden 100'e normalize edilmiştir.")
+    st.caption(f"Not: Puanlar {K} soru üzerinden 100'e normalize edilmiştir.")
 
     # ---- Histogram + Normal Eğri ----
     st.header("📈 Öğrencilerin Puan Dağılımı")
@@ -604,7 +616,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     st.pyplot(fig_v)
 
     # ---- Madde Analizi ----
-    st.header("🔬 Madde Analizi")
+    st.header("🔬 Soru Analizi")
 
     # Tekrar eden soru istatistikleri
     tekrar_df = item_df[item_df["Önceki Kullanım"] != "Yeni"]
@@ -624,23 +636,27 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
             lambda x: re.search(r"Tekrar \((.+?)\)", x).group(1) if re.search(r"Tekrar \((.+?)\)", x) else ""
         ).value_counts()
         sinav_ozet = ", ".join([f"{s}: {c} soru" for s, c in tekrar_sinavlar.items() if s])
-        st.info(f"🔄 **{tekrar_count}/{K} madde daha önce kullanılmış** ({sinav_ozet})")
+        st.info(f"🔄 **{tekrar_count}/{K} soru daha önce kullanılmış** ({sinav_ozet})")
 
     display_df = item_df.rename(
         columns={"Çeldirici": "Çeldirici\n(işlevsiz/toplam)"}
     )
 
-    def clr(v):
-        m = {
-            "Mükemmel": "#E8F5E9",
-            "İyi": "#F1F8E9",
-            "Düzeltilmeli": "#FFF3E0",
-            "Kullanılmamalı": "#FFEBEE",
+    def clr_row(row):
+        """Satır bazlı renklendirme — negatif D kırmızı, diğerleri kategoriye göre."""
+        cat_map = {
+            "Mükemmel": "background-color: #C8E6C9",      # yeşil
+            "İyi": "background-color: #C8E6C9",            # yeşil
+            "Düzeltilmeli": "background-color: #FFF9C4",   # sarı
+            "Kullanılmamalı": "background-color: #FFE0B2", # turuncu
         }
-        return f"background-color: {m[v]}" if v in m else ""
+        if row["D"] < 0:
+            return ["background-color: #FFCDD2"] * len(row)  # kırmızı — negatif ayırt edici
+        style = cat_map.get(row["Kategori"], "")
+        return [style] * len(row)
 
     st.dataframe(
-       display_df.style.map(clr, subset=["Kategori"]),
+       display_df.style.apply(clr_row, axis=1),
         use_container_width=True,
         height=500,
     )
@@ -649,7 +665,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
     st.header("🧭 Karar Destek Matrisi")
     st.caption(
         "Aşağıdaki tabloda sınav setine ilişkin karar destek matrisi sunulmaktadır. "
-        "Tablodaki renkler maddelerin ayırt edicilik ve zorluk indeksine göre dağılımını "
+        "Tablodaki renkler soruların ayırt edicilik ve zorluk indeksine göre dağılımını "
         "ifade etmektedir. Buna göre yeşil = sakla, sarı = gözden geçir, turuncu = revize et "
         "ve kırmızı = sınav setinden çıkar anlamına gelmektedir."
     )
@@ -737,7 +753,7 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
         "Kesme puanı simülasyonu; sınav analizleri sonrasında sınav setindeki kullanılmamalı "
         "kategorisindeki sorular dikkate alınmadan analizler yeniden yapıldığında ortaya çıkan puan tablosudur."
     )
-    bad = item_df[item_df["Kategori"] == "Kullanılmamalı"]["Madde"].tolist()
+    bad = item_df[item_df["Kategori"] == "Kullanılmamalı"]["Soru"].tolist()
     good = [c for c in q_cols if c not in bad]
     new_pct = df[good].sum(axis=1).values / len(good) * 100
     old_pct = scores
@@ -750,43 +766,43 @@ Bu rapordaki madde analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **ü
         sim.append(
             {
                 "Eşik (%)": th,
-                f"İlk analiz ({K} madde)": f"{op} (%{op / N * 100:.1f})",
-                f"Kesme simülasyonu ({len(good)} madde)": f"{np_} (%{np_ / N * 100:.1f})",
+                f"İlk analiz ({K} soru)": f"{op} (%{op / N * 100:.1f})",
+                f"Kesme simülasyonu ({len(good)} soru)": f"{np_} (%{np_ / N * 100:.1f})",
                 "Fark": np_ - op,
             }
         )
     st.dataframe(pd.DataFrame(sim), use_container_width=True)
     sc1, sc2, sc3 = st.columns(3)
-    sc1.metric("Çıkarılan madde", len(bad))
+    sc1.metric("Çıkarılan soru", len(bad))
     sc2.metric("KR-20 (mevcut)", f"{alpha:.3f}")
     sc3.metric(
-        f"KR-20 ({len(good)} madde)",
+        f"KR-20 ({len(good)} soru)",
         f"{kr20_new:.3f}",
         delta=f"{kr20_new - alpha:+.3f}",
     )
 
     # ---- Kritik Maddeler ----
-    st.header("⚠️ Kritik Maddeler")
+    st.header("⚠️ Kritik Sorular")
     neg = item_df[item_df["D"] < 0]
     if not neg.empty:
         st.error(
-            f"**Negatif ayırt ediciliğe sahip {len(neg)} madde** — "
+            f"**Negatif ayırt ediciliğe sahip {len(neg)} soru** — "
             f"yazan öğretim üyesi tarafından acil olarak incelenmelidir!"
         )
         st.dataframe(neg, use_container_width=True)
 
     ceil_ = item_df[item_df["p"] >= 0.95]
     if not ceil_.empty:
-        with st.expander(f"🔝 Tavan: {len(ceil_)} madde (p≥0.95)"):
+        with st.expander(f"🔝 Tavan: {len(ceil_)} soru (p≥0.95)"):
             st.dataframe(
-                ceil_[["Madde", "p", "D", "Karar"]], use_container_width=True
+                ceil_[["Soru", "p", "D", "Karar"]], use_container_width=True
             )
 
     flr_ = item_df[item_df["p"] <= 0.20]
     if not flr_.empty:
-        with st.expander(f"🔻 Taban: {len(flr_)} madde (p≤0.20)"):
+        with st.expander(f"🔻 Taban: {len(flr_)} soru (p≤0.20)"):
             st.dataframe(
-                flr_[["Madde", "p", "D", "Karar"]], use_container_width=True
+                flr_[["Soru", "p", "D", "Karar"]], use_container_width=True
             )
 
     # ---- AI Değerlendirme ----
@@ -812,11 +828,11 @@ KURALLAR:
 - Psikometrik açıdan gelişime açık alanları ve eksiklikleri net ve somut ifade et.
 - Önerileri uygulanabilir ve spesifik yaz.
 - Çeldirici kelimesini kullan (distraktör değil). Negatif ayırt edici ifadesini kullan (negatif D değil).
-- Negatif ayırt edici maddeler için "İçerik uzmanı tarafından acil inceleme önerilir" yerine "soruyu yazan öğretim üyesi tarafından incelenmeli; soruda bilimsel bir hata veya anahtar hatası varsa iptal edilmeli, soru bankasında pasife alınmalı ya da düzeltilmelidir" ifadesini kullan.
-- "Kullanılmamalı" maddelerin "ölçme hassasiyetine neredeyse hiçbir anlamlı katkı sağlamadığını" belirt (sadece sınavın verimliliğini düşürdüğünü değil).
-- Çeldirici analizinde "çeldirici analizleri yapılmalı" yerine "çeldiricileri gözden geçirilmeli, hiçbir öğrencinin işaretlemediği işlemeyen çeldiriciler değiştirilerek maddenin ayırt ediciliği artırılmalıdır" ifadesini kullan.
-- Madde havuzu revizyonunda "Kullanılmamalı" ve "Düzeltilmeli" kategorisindeki toplam madde sayısını ve yüzdesini belirt.
-- Sınav boyutu optimizasyonunda "madde sayısı azaltılarak madde başına düşen süre artırılabilir" yerine "sınav setinde yer alacak soruların dikkatle hazırlanması gerektiği açıktır" ifadesini kullan.
+- Negatif ayırt edici sorular için "İçerik uzmanı tarafından acil inceleme önerilir" yerine "soruyu yazan öğretim üyesi tarafından incelenmeli; soruda bilimsel bir hata veya anahtar hatası varsa iptal edilmeli, soru bankasında pasife alınmalı ya da düzeltilmelidir" ifadesini kullan.
+- "Kullanılmamalı" soruların "ölçme hassasiyetine neredeyse hiçbir anlamlı katkı sağlamadığını" belirt (sadece sınavın verimliliğini düşürdüğünü değil).
+- Çeldirici analizinde "çeldirici analizleri yapılmalı" yerine "çeldiricileri gözden geçirilmeli, hiçbir öğrencinin işaretlemediği işlemeyen çeldiriciler değiştirilerek sorunun ayırt ediciliği artırılmalıdır" ifadesini kullan.
+- Madde havuzu revizyonunda "Kullanılmamalı" ve "Düzeltilmeli" kategorisindeki toplam soru sayısını ve yüzdesini belirt.
+- Sınav boyutu optimizasyonunda "soru sayısı azaltılarak soru başına düşen süre artırılabilir" yerine "sınav setinde yer alacak soruların dikkatle hazırlanması gerektiği açıktır" ifadesini kullan.
 
 VERİLER:
 N={N}, K={K}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
@@ -825,11 +841,11 @@ Guttman={guttman:.3f}, Spearman-Brown={sb_corr:.3f}
 Çarpıklık={skew:.2f}, Basıklık={kurt:.2f}
 Zorluk: {item_df['Zorluk'].value_counts().to_dict()}
 Ayırt edicilik: {cc.to_dict()}
-Negatif ayırt edici madde: {(item_df['D'] < 0).sum()}
+Negatif ayırt edici soru: {(item_df['D'] < 0).sum()}
 p≥0.95: {len(ceil_)}, p≤0.20: {len(flr_)}
-Kaliteli alt küme ({len(qi)} madde) KR-20: {kr20_q if kr20_q else 'N/A'}
-Kesme puanı sim: {len(bad)} madde çıkarılsa KR-20={kr20_new:.3f}
-Tekrar eden soru: {tekrar_count}/{K} madde daha önceki sınavlardan tekrar kullanılmış{f" (Yeni: {yeni_count})" if tekrar_count > 0 else ""}
+Kaliteli alt küme ({len(qi)} soru) KR-20: {kr20_q if kr20_q else 'N/A'}
+Kesme puanı sim: {len(bad)} soru çıkarılsa KR-20={kr20_new:.3f}
+Tekrar eden soru: {tekrar_count}/{K} soru daha önceki sınavlardan tekrar kullanılmış{f" (Yeni: {yeni_count})" if tekrar_count > 0 else ""}
 
 Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece gerçekten varsa)  3. Öneriler"""
                 resp = model.generate_content(prompt)
@@ -927,11 +943,19 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
 
     doc.add_heading("Not", 2)
     doc.add_paragraph(
-        "Bu rapordaki madde analizleri Klasik Test Teorisi (KTT) çerçevesinde, "
+        "Bu rapordaki soru analizleri Klasik Test Teorisi (KTT) çerçevesinde, "
         "üst-alt %27 grup yöntemiyle yapılmıştır. Kelley (1939) ve Ebel (1965) "
         "tarafından gösterildiği üzere bu oran ayırt edicilik indeksi için en güçlü "
         "istatistiksel kestirim performansını vermektedir. Puanlar soru sayısından "
         "bağımsız olarak 100 üzerinden normalize edilmiştir."
+    )
+
+    doc.add_heading("Bilgi Notu", 2)
+    doc.add_paragraph(
+        "Bu raporda değinilen tüm sorular için tekil incelemeler, "
+        "BYK-SBYK Başkan, Yardımcıları ve üyeleri tarafından "
+        "KEYPS > Ölçme Araçları > Kuramsal Sınavlar > İlgili Sınavın solundaki İşlemler Menüsü > "
+        "Gelişmiş Raporlar bölümünden yapılabilir."
     )
 
     # ---- Bölüm 1: Genel ----
@@ -940,16 +964,16 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     sd_ = [
         ("Gösterge", "Değer", "Yorum"),
         ("Öğrenci Sayısı (N)", str(N), ""),
-        ("Madde Sayısı (sınav setindeki soru sayısı)", str(K), ""),
+        ("Soru Sayısı (sınav setindeki soru sayısı)", str(K), ""),
         ("Ortalama ± SD", f"{mn:.2f} ± {sd:.2f}", "100 üzerinden"),
         ("Ortanca", f"{med:.1f}", ""),
-        ("Q1 – Q3", f"{q1v:.1f} – {q3v:.1f}", f"IQR = {q3v - q1v:.1f}"),
+        ("1. Çeyrek – 3. Çeyrek", f"{q1v:.1f} – {q3v:.1f}", f"IQR = {q3v - q1v:.1f}"),
         ("Min – Max", f"{scores.min():.0f} – {scores.max():.0f}", ""),
         ("Çarpıklık / Basıklık", f"{skew:.3f} / {kurt:.3f}", "Sola çarpık" if skew < -0.5 else "Normal"),
         ("≥60 puan (Başarılı öğrenci oranı)", f"{p60} (%{p60 / N * 100:.1f})", ""),
         ("<40 puan (Başarısız öğrenci oranı)", f"{f40} (%{f40 / N * 100:.1f})", ""),
-        ("KR-20 (tüm maddeler)", f"{alpha:.3f}", "Yüksek" if alpha >= 0.80 else "Kabul edilebilir"),
-        (f"KR-20 (kaliteli {len(qi)} madde)", f"{kr20_q:.3f}" if kr20_q else "—", "Önerilen/KE ∩ Mükemmel/İyi"),
+        ("KR-20 (tüm sorular)", f"{alpha:.3f}", "Yüksek" if alpha >= 0.80 else "Kabul edilebilir"),
+        (f"KR-20 (kaliteli {len(qi)} soru)", f"{kr20_q:.3f}" if kr20_q else "—", "Önerilen/KE ∩ Mükemmel/İyi"),
         ("Ferguson's δ", f"{fdelta:.3f}", "İyi" if fdelta >= 0.90 else "Düşük"),
         ("Guttman Split-Half", f"{guttman:.3f}", ""),
         ("Spearman-Brown", f"{sb_corr:.3f}", ""),
@@ -977,7 +1001,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
 
     # ---- Bölüm 3: Madde Analizi ----
     doc.add_page_break()
-    doc.add_heading("3. Madde Analizi Detay Tablosu", 1)
+    doc.add_heading("3. Soru Analizi Detay Tablosu", 1)
 
     # Özet satırı — bold ve kırmızı
     summary_para = doc.add_paragraph()
@@ -993,13 +1017,13 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
 
     # Renk açıklaması (Bölüm 4 ile tutarlı)
     doc.add_paragraph(
-        "Tablodaki satır renkleri maddelerin ayırt edicilik kategorisine göre belirlenmiştir. "
+        "Tablodaki satır renkleri soruların ayırt edicilik kategorisine göre belirlenmiştir. "
         "Buna göre yeşil = mükemmel/iyi (sakla), sarı = düzeltilmeli (gözden geçir), "
         "turuncu = kullanılmamalı (revize et) ve kırmızı = negatif ayırt edici (sınav setinden çıkar) "
         "anlamına gelmektedir."
     )
 
-    hdrs = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki Kullanım", "Karar"]
+    hdrs = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki Kullanım", "Karar"]
     mt = doc.add_table(rows=len(item_df) + 1, cols=len(hdrs))
     mt.style = "Light Grid Accent 1"
     for j, h in enumerate(hdrs):
@@ -1016,7 +1040,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     }
 
     for i, (_, row) in enumerate(item_df.iterrows()):
-        cols = ["Madde", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Önceki Kullanım", "Karar"]
+        cols = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Önceki Kullanım", "Karar"]
         kategori = row["Kategori"]
         d_val = row["D"]
 
@@ -1042,7 +1066,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     doc.add_heading("4. Karar Destek Matrisi", 1)
     doc.add_paragraph(
         "Aşağıdaki tabloda sınav setine ilişkin karar destek matrisi sunulmaktadır. "
-        "Tablodaki renkler maddelerin ayırt edicilik ve zorluk indeksine göre dağılımını "
+        "Tablodaki renkler soruların ayırt edicilik ve zorluk indeksine göre dağılımını "
         "ifade etmektedir. Buna göre yeşil = sakla, sarı = gözden geçir, turuncu = revize et "
         "ve kırmızı = sınav setinden çıkar anlamına gelmektedir."
     )
@@ -1059,28 +1083,28 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "Kesme puanı simülasyonu; sınav analizleri sonrasında sınav setindeki kullanılmamalı "
         "kategorisindeki sorular dikkate alınmadan analizler yeniden yapıldığında ortaya çıkan "
         f"puan tablosudur. Buna göre bu sınavda {len(bad)} adet 'Kullanılmamalı' kategorisindeki "
-        "madde çıkarıldığında puanlar 100 üzerinden yeniden hesaplandığında aşağıdaki tablo "
+        "soru çıkarıldığında puanlar 100 üzerinden yeniden hesaplandığında aşağıdaki tablo "
         "ortaya çıkmıştır."
     )
     doc.add_paragraph(f"KR-20: {alpha:.3f} → {kr20_new:.3f} ({kr20_new - alpha:+.3f})")
     st_ = doc.add_table(rows=len(sim) + 1, cols=4)
     st_.style = "Light Grid Accent 1"
-    sim_hdrs = ["Eşik (%)", f"İlk analiz ({K} madde)", f"Kesme simülasyonu ({len(good)} madde)", "Fark"]
+    sim_hdrs = ["Eşik (%)", f"İlk analiz ({K} soru)", f"Kesme simülasyonu ({len(good)} soru)", "Fark"]
     for j, h in enumerate(sim_hdrs):
         st_.rows[0].cells[j].text = h
         for run in st_.rows[0].cells[j].paragraphs[0].runs:
             run.bold = True
     for i, s in enumerate(sim):
         st_.rows[i + 1].cells[0].text = str(s["Eşik (%)"])
-        st_.rows[i + 1].cells[1].text = str(s[f"İlk analiz ({K} madde)"])
-        st_.rows[i + 1].cells[2].text = str(s[f"Kesme simülasyonu ({len(good)} madde)"])
+        st_.rows[i + 1].cells[1].text = str(s[f"İlk analiz ({K} soru)"])
+        st_.rows[i + 1].cells[2].text = str(s[f"Kesme simülasyonu ({len(good)} soru)"])
         st_.rows[i + 1].cells[3].text = str(s["Fark"])
 
     # ---- Bölüm 7: Kritik Maddeler ----
     if not neg.empty:
-        doc.add_heading("7. Kritik Maddeler — Negatif Ayırt Edici", 1)
+        doc.add_heading("7. Kritik Sorular — Negatif Ayırt Edici", 1)
         doc.add_paragraph(
-            "Sınav analizi sonucunda maddelerde alt gruptaki öğrenciler üst gruptan daha yüksek "
+            "Sınav analizi sonucunda sorularda alt gruptaki öğrenciler üst gruptan daha yüksek "
             "doğru yanıt oranına sahip olması Negatif Ayırt edicilik olarak tanımlanmaktadır. "
             "Bu durumun saptandığı sorularda hatalı cevap anahtarı, soru kökünde belirsizlik "
             "veya çoklu doğru yanıt ihtimali dikkate alınmalıdır. Negatif Ayırt edicilik "
@@ -1089,7 +1113,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         doc.add_paragraph(
             f"Bu sınavda Negatif Ayırt edicilik saptanan sorular;"
         )
-        doc.add_paragraph(f"Maddeler: {', '.join(neg['Madde'].tolist())}")
+        doc.add_paragraph(f"Sorular: {', '.join(neg['Soru'].tolist())}")
 
     # ---- Bölüm 8: AI ----
     if ai_general:
