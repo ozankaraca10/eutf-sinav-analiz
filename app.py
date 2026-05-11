@@ -175,7 +175,16 @@ def parse_freq(f):
             )
         ].copy()
         freq["NO"] = freq["NO"].astype(int)
-    return freq
+
+    # İptal edilen soruları tespit et (KOK sütununda "***Soru iptal edildi***")
+    iptal_nums = set()
+    if "KOK" in freq.columns and "NO" in freq.columns:
+        for _, row in freq.iterrows():
+            kok_val = str(row.get("KOK", "")).strip()
+            if kok_val.startswith("***Soru iptal edildi***") or kok_val.startswith("***soru iptal edildi***"):
+                iptal_nums.add(int(row["NO"]))
+
+    return freq, iptal_nums
 
 
 def parse_dist(sec, n):
@@ -316,10 +325,28 @@ if run_btn and student_file and freq_file:
     # ---- Data Loading ----
     with st.spinner("Veriler okunuyor..."):
         df, q_cols = parse_student(student_file)
-        freq = parse_freq(freq_file)
+        freq, iptal_nums = parse_freq(freq_file)
 
     # Sınav adını dosya adından çıkar
     exam_name = extract_exam_name(student_file.name)
+
+    # İptal edilen soruları ayır
+    iptal_cols = [q for q in q_cols if int(re.search(r"\d+", q).group()) in iptal_nums]
+    aktif_cols = [q for q in q_cols if q not in iptal_cols]
+
+    K_toplam = len(q_cols)  # sınav setindeki toplam soru sayısı (iptal dahil)
+
+    # İptal edilen sorular varsa bilgilendir
+    if iptal_cols:
+        st.warning(
+            f"⚠️ **{len(iptal_cols)} soru iptal edilmiş:** {', '.join(iptal_cols)}. "
+            f"Bu sorular analiz dışı bırakılarak rapor {len(aktif_cols)} aktif soru üzerinden hazırlanmıştır."
+        )
+
+    # Puanları yalnızca aktif sorular üzerinden yeniden hesapla
+    q_cols = aktif_cols
+    df["TOTAL_RAW"] = df[q_cols].sum(axis=1)
+    df["TOTAL"] = df["TOTAL_RAW"] / len(q_cols) * 100
 
     N = len(df)
     K = len(q_cols)
@@ -327,8 +354,9 @@ if run_btn and student_file and freq_file:
     raw_scores = df["TOTAL_RAW"].values.astype(float)
 
     st.success(
-        f"✅ {N} öğrenci × {K} soru yüklendi. "
-        f"Puanlar 100 üzerinden normalize edildi."
+        f"✅ {N} öğrenci × {K_toplam} soru yüklendi"
+        + (f" ({len(iptal_cols)} iptal → {K} aktif soru üzerinden analiz)." if iptal_cols
+           else f". Puanlar 100 üzerinden normalize edildi.")
     )
 
     # ---- Analysis ----
@@ -835,7 +863,7 @@ KURALLAR:
 - Sınav boyutu optimizasyonunda "soru sayısı azaltılarak soru başına düşen süre artırılabilir" yerine "sınav setinde yer alacak soruların dikkatle hazırlanması gerektiği açıktır" ifadesini kullan.
 
 VERİLER:
-N={N}, K={K}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
+N={N}, K={K} (aktif soru){f", toplam soru: {K_toplam}, iptal edilen: {len(iptal_cols)} ({', '.join(iptal_cols)})" if iptal_cols else ""}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
 KR-20={alpha:.3f}, SEM={sem:.2f}, Ferguson δ={fdelta:.3f}
 Guttman={guttman:.3f}, Spearman-Brown={sb_corr:.3f}
 Çarpıklık={skew:.2f}, Basıklık={kurt:.2f}
@@ -961,9 +989,24 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     # ---- Bölüm 1: Genel ----
     doc.add_page_break()
     doc.add_heading("1. Genel Psikometrik Göstergeler", 1)
+
+    # İptal edilen soru bilgisi
+    if iptal_cols:
+        iptal_para = doc.add_paragraph()
+        r = iptal_para.add_run(
+            f"Not: Sınav setindeki toplam {K_toplam} sorudan {len(iptal_cols)} tanesi iptal edilmiştir "
+            f"({', '.join(iptal_cols)}). Aşağıdaki tüm analizler iptal edilen sorular çıkarılarak "
+            f"{K} aktif soru üzerinden yapılmıştır."
+        )
+        r.italic = True
+        r.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
+
     sd_ = [
         ("Gösterge", "Değer", "Yorum"),
         ("Öğrenci Sayısı (N)", str(N), ""),
+        ("Toplam Soru Sayısı", str(K_toplam),
+         f"{len(iptal_cols)} iptal → {K} aktif" if iptal_cols else ""),
+        ("Aktif Soru Sayısı (analiz edilen)", str(K), "") if iptal_cols else
         ("Soru Sayısı (sınav setindeki soru sayısı)", str(K), ""),
         ("Ortalama ± SD", f"{mn:.2f} ± {sd:.2f}", "100 üzerinden"),
         ("Ortanca", f"{med:.1f}", ""),
