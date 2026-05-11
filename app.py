@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from scipy import stats as sp_stats
 from docx import Document
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from io import BytesIO
 import re, warnings, datetime
@@ -181,7 +181,7 @@ def parse_freq(f):
     if "KOK" in freq.columns and "NO" in freq.columns:
         for _, row in freq.iterrows():
             kok_val = str(row.get("KOK", "")).strip()
-            if kok_val.startswith("***Soru iptal edildi***") or kok_val.startswith("***soru iptal edildi***"):
+            if "soru iptal edildi" in kok_val.lower():
                 iptal_nums.add(int(row["NO"]))
 
     return freq, iptal_nums
@@ -333,10 +333,8 @@ if run_btn and student_file and freq_file:
     # İptal edilen soruları ayır
     iptal_cols = [q for q in q_cols if int(re.search(r"\d+", q).group()) in iptal_nums]
     aktif_cols = [q for q in q_cols if q not in iptal_cols]
+    K_toplam = len(q_cols)  # toplam soru sayısı (iptal dahil)
 
-    K_toplam = len(q_cols)  # sınav setindeki toplam soru sayısı (iptal dahil)
-
-    # İptal edilen sorular varsa bilgilendir
     if iptal_cols:
         st.warning(
             f"⚠️ **{len(iptal_cols)} soru iptal edilmiş:** {', '.join(iptal_cols)}. "
@@ -350,7 +348,7 @@ if run_btn and student_file and freq_file:
 
     N = len(df)
     K = len(q_cols)
-    scores = df["TOTAL"].values.astype(float)  # 100 üzerinden
+    scores = df["TOTAL"].values.astype(float)
     raw_scores = df["TOTAL_RAW"].values.astype(float)
 
     st.success(
@@ -506,7 +504,7 @@ Bu rapordaki soru analizleri **Klasik Test Teorisi (KTT)** çerçevesinde, **üs
     # ---- KEYPS Bilgi Notu ----
     st.info(
         "📌 **Bilgi Notu:** Bu raporda değinilen tüm sorular için tekil incelemeler, "
-        "BYK-SBYK Başkan, Yardımcıları ve üyeleri tarafından "
+        "BYK-SBYK Başkan, yardımcıları ve üyeleri tarafından "
         "**KEYPS > Ölçme Araçları > Kuramsal Sınavlar > İlgili Sınavın solundaki İşlemler Menüsü > "
         "Gelişmiş Raporlar** bölümünden yapılabilir."
     )
@@ -863,7 +861,7 @@ KURALLAR:
 - Sınav boyutu optimizasyonunda "soru sayısı azaltılarak soru başına düşen süre artırılabilir" yerine "sınav setinde yer alacak soruların dikkatle hazırlanması gerektiği açıktır" ifadesini kullan.
 
 VERİLER:
-N={N}, K={K} (aktif soru){f", toplam soru: {K_toplam}, iptal edilen: {len(iptal_cols)} ({', '.join(iptal_cols)})" if iptal_cols else ""}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
+N={N}, K={K} (aktif soru){f", toplam soru: {K_toplam}, iptal edilen: {len(iptal_cols)} ({chr(39).join([", ".join(iptal_cols)])})" if iptal_cols else ""}, Ort={mn:.2f}±{sd:.2f} (100 üzerinden), Med={med:.1f}
 KR-20={alpha:.3f}, SEM={sem:.2f}, Ferguson δ={fdelta:.3f}
 Guttman={guttman:.3f}, Spearman-Brown={sb_corr:.3f}
 Çarpıklık={skew:.2f}, Basıklık={kurt:.2f}
@@ -895,6 +893,13 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         bufs[name] = b
 
     doc = Document()
+
+    # Kenar boşlukları — 1.25 cm
+    for section in doc.sections:
+        section.top_margin = Cm(1.25)
+        section.bottom_margin = Cm(1.25)
+        section.left_margin = Cm(1.25)
+        section.right_margin = Cm(1.25)
 
     # Styles
     style = doc.styles["Normal"]
@@ -943,6 +948,20 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         r = t.add_run(analyst_name)
         r.bold = True
         r.font.size = Pt(12)
+
+    # AI kullanım notu — kapak sayfasında
+    if ai_general:
+        doc.add_paragraph("")
+        fn_cover = doc.add_paragraph()
+        fn_cover.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r = fn_cover.add_run(
+            'Bu raporun oluşturulmasında yapay zekadan destek alınmış olup '
+            'genel değerlendirme ifadeleri Tıp Eğitimi Danışman Öğretim Üyesi '
+            'tarafından hazırlanmıştır.'
+        )
+        r.italic = True
+        r.font.size = Pt(9)
+
     doc.add_page_break()
 
     # ---- Kısaltmalar ----
@@ -960,7 +979,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     ]
     at = doc.add_table(rows=len(abbr) + 1, cols=2)
     at.style = "Light Grid Accent 1"
-    at.rows[0].cells[0].text = "kısaltma ve kavram"
+    at.rows[0].cells[0].text = "Kısaltma ve Kavram"
     at.rows[0].cells[1].text = "Açıklama"
     for cell in at.rows[0].cells:
         for run in cell.paragraphs[0].runs:
@@ -969,7 +988,6 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         at.rows[i + 1].cells[0].text = k
         at.rows[i + 1].cells[1].text = v
 
-    doc.add_heading("Not", 2)
     doc.add_paragraph(
         "Bu rapordaki soru analizleri Klasik Test Teorisi (KTT) çerçevesinde, "
         "üst-alt %27 grup yöntemiyle yapılmıştır. Kelley (1939) ve Ebel (1965) "
@@ -978,10 +996,10 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "bağımsız olarak 100 üzerinden normalize edilmiştir."
     )
 
-    doc.add_heading("Bilgi Notu", 2)
+    doc.add_heading("Notu", 2)
     doc.add_paragraph(
         "Bu raporda değinilen tüm sorular için tekil incelemeler, "
-        "BYK-SBYK Başkan, Yardımcıları ve üyeleri tarafından "
+        "BYK-SBYK Başkan, yardımcıları ve üyeleri tarafından "
         "KEYPS > Ölçme Araçları > Kuramsal Sınavlar > İlgili Sınavın solundaki İşlemler Menüsü > "
         "Gelişmiş Raporlar bölümünden yapılabilir."
     )
@@ -1001,20 +1019,57 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         r.italic = True
         r.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
 
-    sd_ = [
+    # Kategorik alt tablolar — her bölüm ayrı başlık ve tablo
+    from docx.oxml.parser import parse_xml as _pxml
+    from docx.oxml.ns import nsdecls as _nsd
+
+    def _add_cat_table(doc, title, rows_data, shade_hex):
+        """Kategorik başlık + tablo oluşturur."""
+        tp = doc.add_paragraph()
+        tr = tp.add_run(title)
+        tr.bold = True
+        tr.font.size = Pt(11)
+        tr.font.color.rgb = RGBColor.from_string("1F4E79")
+        tbl = doc.add_table(rows=len(rows_data), cols=3)
+        tbl.style = "Light Grid Accent 1"
+        for i, (g, d, y) in enumerate(rows_data):
+            tbl.rows[i].cells[0].text = g
+            tbl.rows[i].cells[1].text = d
+            tbl.rows[i].cells[2].text = y
+            if i == 0:
+                for cell in tbl.rows[i].cells:
+                    for run in cell.paragraphs[0].runs:
+                        run.bold = True
+                    shd = _pxml(f'<w:shd {_nsd("w")} w:val="clear" w:color="auto" w:fill="{shade_hex}"/>')
+                    cell._tc.get_or_add_tcPr().append(shd)
+
+    # 1) Sınav Genel Bilgileri
+    sinav_bilgi = [("Gösterge", "Değer", "Yorum"), ("Öğrenci Sayısı (N)", str(N), "")]
+    if iptal_cols:
+        sinav_bilgi.append(("Toplam Soru Sayısı", str(K_toplam), f"{len(iptal_cols)} iptal → {K} aktif"))
+        sinav_bilgi.append(("Aktif Soru Sayısı (analiz edilen)", str(K), ""))
+    else:
+        sinav_bilgi.append(("Soru Sayısı", str(K), ""))
+    sinav_bilgi.append(("Tekrar Eden Soru", f"{tekrar_count}/{K} (%{tekrar_count/K*100:.1f})",
+        f"Yeni: {yeni_count}" if tekrar_count > 0 else "Tüm sorular yeni"))
+    _add_cat_table(doc, "Sınav Genel Bilgileri", sinav_bilgi, "D6E4F0")
+
+    # 2) Puan Dağılımı
+    puan_rows = [
         ("Gösterge", "Değer", "Yorum"),
-        ("Öğrenci Sayısı (N)", str(N), ""),
-        ("Toplam Soru Sayısı", str(K_toplam),
-         f"{len(iptal_cols)} iptal → {K} aktif" if iptal_cols else ""),
-        ("Aktif Soru Sayısı (analiz edilen)", str(K), "") if iptal_cols else
-        ("Soru Sayısı (sınav setindeki soru sayısı)", str(K), ""),
         ("Ortalama ± SD", f"{mn:.2f} ± {sd:.2f}", "100 üzerinden"),
         ("Ortanca", f"{med:.1f}", ""),
         ("1. Çeyrek – 3. Çeyrek", f"{q1v:.1f} – {q3v:.1f}", f"IQR = {q3v - q1v:.1f}"),
         ("Min – Max", f"{scores.min():.0f} – {scores.max():.0f}", ""),
         ("Çarpıklık / Basıklık", f"{skew:.3f} / {kurt:.3f}", "Sola çarpık" if skew < -0.5 else "Normal"),
-        ("≥60 puan (Başarılı öğrenci oranı)", f"{p60} (%{p60 / N * 100:.1f})", ""),
-        ("<40 puan (Başarısız öğrenci oranı)", f"{f40} (%{f40 / N * 100:.1f})", ""),
+        ("≥60 puan (Başarılı)", f"{p60} (%{p60 / N * 100:.1f})", ""),
+        ("<40 puan (Başarısız)", f"{f40} (%{f40 / N * 100:.1f})", ""),
+    ]
+    _add_cat_table(doc, "Puan Dağılımı", puan_rows, "E2EFDA")
+
+    # 3) Güvenirlik Göstergeleri
+    guvenirlik_rows = [
+        ("Gösterge", "Değer", "Yorum"),
         ("KR-20 (tüm sorular)", f"{alpha:.3f}", "Yüksek" if alpha >= 0.80 else "Kabul edilebilir"),
         (f"KR-20 (kaliteli {len(qi)} soru)", f"{kr20_q:.3f}" if kr20_q else "—", "Önerilen/KE ∩ Mükemmel/İyi"),
         ("Ferguson's δ", f"{fdelta:.3f}", "İyi" if fdelta >= 0.90 else "Düşük"),
@@ -1022,25 +1077,13 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         ("Spearman-Brown", f"{sb_corr:.3f}", ""),
         ("SEM", f"{sem:.2f}", ""),
         ("%95 Güven Aralığı", f"±{ci95:.1f} puan", ""),
-        ("Tekrar Eden Soru", f"{tekrar_count}/{K} (%{tekrar_count/K*100:.1f})",
-         f"Yeni: {yeni_count}" if tekrar_count > 0 else "Tüm sorular yeni"),
     ]
-    gt = doc.add_table(rows=len(sd_), cols=3)
-    gt.style = "Light Grid Accent 1"
-    for i, (g, d, y) in enumerate(sd_):
-        gt.rows[i].cells[0].text = g
-        gt.rows[i].cells[1].text = d
-        gt.rows[i].cells[2].text = y
-        if i == 0:
-            for cell in gt.rows[i].cells:
-                for run in cell.paragraphs[0].runs:
-                    run.bold = True
+    _add_cat_table(doc, "Güvenirlik Göstergeleri", guvenirlik_rows, "FCE4D6")
 
     # ---- Bölüm 2: Puan Dağılımı ----
     doc.add_heading("2. Öğrencilerin Puan Dağılımı", 1)
-    doc.add_picture(bufs["hist"], width=Inches(5.8))
-    doc.add_paragraph("")
-    doc.add_picture(bufs["violin"], width=Inches(5.8))
+    doc.add_picture(bufs["hist"], width=Inches(7.0))
+    doc.add_picture(bufs["violin"], width=Inches(7.0))
 
     # ---- Bölüm 3: Madde Analizi ----
     doc.add_page_break()
@@ -1066,7 +1109,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "anlamına gelmektedir."
     )
 
-    hdrs = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki Kullanım", "Karar"]
+    hdrs = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki kullanım", "Karar"]
     mt = doc.add_table(rows=len(item_df) + 1, cols=len(hdrs))
     mt.style = "Light Grid Accent 1"
     for j, h in enumerate(hdrs):
@@ -1105,6 +1148,37 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
                 )
                 cell._tc.get_or_add_tcPr().append(shading_elm)
 
+    # Karar Tanımları tablosu
+    doc.add_paragraph("")
+    kt_para = doc.add_paragraph()
+    kt_run = kt_para.add_run("Karar Tanımları")
+    kt_run.bold = True
+    kt_run.font.size = Pt(12)
+
+    karar_tanimlari = [
+        ("Kategori", "Önerilen Karar İfadesi", "Gerekçeli Aksiyon"),
+        ("Mükemmel / İyi", "Soru bankasında sakla",
+         "Psikometrik performansı yüksek; revizyon gerekmeden bir sonraki sınav setinde kullanılabilir."),
+        ("Düzeltilmeli", "Çeldirici optimizasyonu gerekli",
+         "Soru ayırt ediciliğini artırmak için özellikle seçilmeyen (işlemeyen) çeldiriciler teknik olarak revize edilmelidir."),
+        ("Kullanılmamalı (Kolay)", "Seçicilik düşük; revize et / pasife al",
+         "Soru tavan etkisi yaratmaktadır; ya zorluk düzeyi artırılmalı ya da temel bilgi sorusu olarak etiketlenip yoğunluğu azaltılmalıdır."),
+        ("Kullanılmamalı (Zor)", "Ölçme hassasiyeti düşük; bankadan çıkar",
+         "Sorunun bilen ile bilmeyen öğrenciyi ayırma gücü yoktur; soru kökündeki ifade karmaşası veya bilimsel düzey yeniden değerlendirilmelidir."),
+        ("Negatif Ayırt Edici", "Kritik: Acil inceleme ve iptal değerlendirmesi",
+         "Üst grubun yanlış yapma oranı yüksektir; hatalı cevap anahtarı veya çift doğru yanıt ihtimaline karşı yazar tarafından ivedilikle incelenmelidir."),
+    ]
+    kt = doc.add_table(rows=len(karar_tanimlari), cols=3)
+    kt.style = "Light Grid Accent 1"
+    for i, (col1, col2, col3) in enumerate(karar_tanimlari):
+        kt.rows[i].cells[0].text = col1
+        kt.rows[i].cells[1].text = col2
+        kt.rows[i].cells[2].text = col3
+        if i == 0:
+            for cell in kt.rows[i].cells:
+                for run in cell.paragraphs[0].runs:
+                    run.bold = True
+
     # ---- Bölüm 4: Karar Destek Matrisi ----
     doc.add_heading("4. Karar Destek Matrisi", 1)
     doc.add_paragraph(
@@ -1113,11 +1187,11 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "ifade etmektedir. Buna göre yeşil = sakla, sarı = gözden geçir, turuncu = revize et "
         "ve kırmızı = sınav setinden çıkar anlamına gelmektedir."
     )
-    doc.add_picture(bufs["matrix"], width=Inches(5.5))
+    doc.add_picture(bufs["matrix"], width=Inches(7.0))
 
     # ---- Bölüm 5: Scatter ----
     doc.add_heading("5. Zorluk ve Ayırt Edicilik İndekslerinin Birlikteliği", 1)
-    doc.add_picture(bufs["scatter"], width=Inches(5.5))
+    doc.add_picture(bufs["scatter"], width=Inches(7.0))
 
     # ---- Bölüm 6: Kesme Puanı ----
     doc.add_page_break()
@@ -1154,27 +1228,30 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
             "belirlenen soru; yazan öğretim üyesi tarafından acil olarak incelemelidir."
         )
         doc.add_paragraph(
-            f"Bu sınavda Negatif Ayırt edicilik saptanan sorular;"
+            f"Bu sınavda Negatif Ayırt edicilik saptanan sorular: "
+            f"{', '.join(neg['Soru'].tolist())}"
         )
-        doc.add_paragraph(f"Sorular: {', '.join(neg['Soru'].tolist())}")
 
     # ---- Bölüm 8: AI ----
     if ai_general:
         doc.add_page_break()
         next_section = 8 if not neg.empty else 7
-        doc.add_heading(f"{next_section}. Genel Değerlendirme*", 1)
+        doc.add_heading(f"{next_section}. Genel Değerlendirme ve Öneriler", 1)
         intro = doc.add_paragraph(
             "Ölçme-değerlendirme ilkeleri doğrultusunda, paylaşılan sınav verilerinin "
             "psikometrik analizine ilişkin değerlendirmeler aşağıda sunulmuştur."
         )
         intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        sub_section_counter = 0
         for line in ai_general.split("\n"):
             line = line.strip()
             if not line:
                 continue
             if line.startswith("#"):
-                # Başlık — heading 2, bold zaten ama ek olarak garantiliyoruz
+                # Başlık — heading 2, bölüm numarası ekle
+                sub_section_counter += 1
                 clean_title = re.sub(r"\*\*(.+?)\*\*", r"\1", line.lstrip("# "))
+                clean_title = f"{next_section}.{sub_section_counter}. {clean_title}"
                 h = doc.add_heading(clean_title, level=2)
                 for run in h.runs:
                     run.bold = True
@@ -1202,47 +1279,6 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
                         r.bold = True
                     else:
                         pp.add_run(part)
-
-    # ---- AI Footnote ----
-    if ai_general:
-        doc.add_paragraph("")
-        fn = doc.add_paragraph()
-        r = fn.add_run(
-            '*Bu raporun oluşturulmasında yapay zekadan destek alınmış olup '
-            'genel değerlendirme ifadeleri Tıp Eğitimi Danışman Öğretim Üyesi '
-            'tarafından hazırlanmıştır.'
-        )
-        r.italic = True
-        r.font.size = Pt(9)
-
-    # ---- Son Sayfa: İmza ----
-    doc.add_page_break()
-    for _ in range(8):
-        doc.add_paragraph("")
-    for text in ["Ege Üniversitesi Tıp Fakültesi", "Tıp Eğitimi Anabilim Dalı"]:
-        t = doc.add_paragraph()
-        t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        t.add_run(text).bold = True
-    doc.add_paragraph("")
-
-    if analyst_name:
-        t = doc.add_paragraph()
-        t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = t.add_run("Tıp Eğitimi Danışman Öğretim Üyesi")
-        r.bold = True
-        r.font.size = Pt(11)
-        t = doc.add_paragraph()
-        t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = t.add_run(analyst_name)
-        r.font.size = Pt(12)
-        r.bold = True
-
-    doc.add_paragraph("")
-    t = doc.add_paragraph()
-    t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    t.add_run(
-        f"Rapor Tarihi: {datetime.date.today().strftime('%d.%m.%Y')}"
-    ).font.size = Pt(10)
 
     # Save
     buf = BytesIO()
