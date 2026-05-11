@@ -979,6 +979,10 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     ]
     at = doc.add_table(rows=len(abbr) + 1, cols=2)
     at.style = "Light Grid Accent 1"
+    # Sütun genişlikleri: %30 / %70 (A4 1.25cm margin → ~18.5cm content → Cm(5.55) / Cm(12.95))
+    for row in at.rows:
+        row.cells[0].width = Cm(5.55)
+        row.cells[1].width = Cm(12.95)
     at.rows[0].cells[0].text = "Kısaltma ve Kavram"
     at.rows[0].cells[1].text = "Açıklama"
     for cell in at.rows[0].cells:
@@ -988,6 +992,9 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         at.rows[i + 1].cells[0].text = k
         at.rows[i + 1].cells[1].text = v
 
+    doc.add_paragraph("")  # tablo sonrası boşluk
+
+    doc.add_heading("Bilgi Notu", 2)
     doc.add_paragraph(
         "Bu rapordaki soru analizleri Klasik Test Teorisi (KTT) çerçevesinde, "
         "üst-alt %27 grup yöntemiyle yapılmıştır. Kelley (1939) ve Ebel (1965) "
@@ -995,8 +1002,6 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "istatistiksel kestirim performansını vermektedir. Puanlar soru sayısından "
         "bağımsız olarak 100 üzerinden normalize edilmiştir."
     )
-
-    doc.add_heading("Notu", 2)
     doc.add_paragraph(
         "Bu raporda değinilen tüm sorular için tekil incelemeler, "
         "BYK-SBYK Başkan, yardımcıları ve üyeleri tarafından "
@@ -1053,6 +1058,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
     sinav_bilgi.append(("Tekrar Eden Soru", f"{tekrar_count}/{K} (%{tekrar_count/K*100:.1f})",
         f"Yeni: {yeni_count}" if tekrar_count > 0 else "Tüm sorular yeni"))
     _add_cat_table(doc, "Sınav Genel Bilgileri", sinav_bilgi, "D6E4F0")
+    doc.add_paragraph("")  # tablo sonrası boşluk
 
     # 2) Puan Dağılımı
     puan_rows = [
@@ -1066,6 +1072,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         ("<40 puan (Başarısız)", f"{f40} (%{f40 / N * 100:.1f})", ""),
     ]
     _add_cat_table(doc, "Puan Dağılımı", puan_rows, "E2EFDA")
+    doc.add_paragraph("")  # tablo sonrası boşluk
 
     # 3) Güvenirlik Göstergeleri
     guvenirlik_rows = [
@@ -1079,6 +1086,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         ("%95 Güven Aralığı", f"±{ci95:.1f} puan", ""),
     ]
     _add_cat_table(doc, "Güvenirlik Göstergeleri", guvenirlik_rows, "FCE4D6")
+    doc.add_paragraph("")  # tablo sonrası boşluk
 
     # ---- Bölüm 2: Puan Dağılımı ----
     doc.add_heading("2. Öğrencilerin Puan Dağılımı", 1)
@@ -1096,6 +1104,7 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         f"Düzeltilmeli: {cc.get('Düzeltilmeli', 0)}  ·  "
         f"Kullanılmamalı: {cc.get('Kullanılmamalı', 0)}  ·  "
         f"Negatif Ayırt Edici: {(item_df['D'] < 0).sum()}"
+        + (f"  ·  İptal: {len(iptal_cols)}" if iptal_cols else "")
     )
     r = summary_para.add_run(summary_text)
     r.bold = True
@@ -1107,10 +1116,24 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
         "Buna göre yeşil = mükemmel/iyi (sakla), sarı = düzeltilmeli (gözden geçir), "
         "turuncu = kullanılmamalı (revize et) ve kırmızı = negatif ayırt edici (sınav setinden çıkar) "
         "anlamına gelmektedir."
+        + (" Siyah satırlar analiz öncesinde iptal edilen soruları göstermektedir." if iptal_cols else "")
     )
 
     hdrs = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici\n(işlevsiz/toplam)", "Önceki kullanım", "Karar"]
-    mt = doc.add_table(rows=len(item_df) + 1, cols=len(hdrs))
+
+    # İptal edilen sorular için satır hazırla
+    iptal_rows = []
+    for q in iptal_cols:
+        iptal_rows.append({
+            "Soru": q, "p": "—", "Zorluk": "—", "D": "—", "r_pbi": "—",
+            "Kategori": "İptal", "Çeldirici": "—", "Önceki Kullanım": "—",
+            "Karar": "Soru, analiz öncesinde sınav setinden çıkarılmıştır",
+        })
+    iptal_row_df = pd.DataFrame(iptal_rows) if iptal_rows else pd.DataFrame()
+
+    # Toplam satır: aktif + iptal
+    total_rows_for_table = len(item_df) + len(iptal_rows)
+    mt = doc.add_table(rows=total_rows_for_table + 1, cols=len(hdrs))
     mt.style = "Light Grid Accent 1"
     for j, h in enumerate(hdrs):
         mt.rows[0].cells[j].text = h
@@ -1148,6 +1171,26 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
                 )
                 cell._tc.get_or_add_tcPr().append(shading_elm)
 
+    # İptal edilen soru satırları — siyah bg, beyaz yazı
+    for idx, irow in enumerate(iptal_rows):
+        row_num = len(item_df) + 1 + idx
+        cols_iptal = ["Soru", "p", "Zorluk", "D", "r_pbi", "Kategori", "Çeldirici", "Önceki Kullanım", "Karar"]
+        for j, col in enumerate(cols_iptal):
+            cell = mt.rows[row_num].cells[j]
+            cell.text = str(irow[col])
+            # Siyah arka plan
+            from docx.oxml.parser import parse_xml
+            from docx.oxml.ns import nsdecls
+            shading_elm = parse_xml(
+                f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="000000"/>'
+            )
+            cell._tc.get_or_add_tcPr().append(shading_elm)
+            # Beyaz yazı
+            for run in cell.paragraphs[0].runs:
+                run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+
+    doc.add_paragraph("")  # tablo sonrası boşluk
+
     # Karar Tanımları tablosu
     doc.add_paragraph("")
     kt_para = doc.add_paragraph()
@@ -1178,6 +1221,8 @@ Başlıklar: 1. Gelişime Açık Alanlar  2. Dikkat Çekici Göstergeler (sadece
             for cell in kt.rows[i].cells:
                 for run in cell.paragraphs[0].runs:
                     run.bold = True
+
+    doc.add_paragraph("")  # tablo sonrası boşluk
 
     # ---- Bölüm 4: Karar Destek Matrisi ----
     doc.add_heading("4. Karar Destek Matrisi", 1)
